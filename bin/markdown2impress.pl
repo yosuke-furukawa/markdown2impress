@@ -23,26 +23,35 @@ GetOptions(
     'column=i'    => \$opts{ max_column },
     'outputdir=s' => \$opts{ outputdir },
 );
-
 my $SectionRe = qr{(.+[ \t]*\n[-=]+[ \t]*\n*(?:(?!.+[ \t]*\n[-=]+[ \t]*\n*)(?:.|\n))*)};
 
-$opts{ outputdir } = File::Spec->canonpath( $opts{ outputdir } );
-output_static_files( $opts{ outputdir } );
+main();
 
-my $outputfile = 'index.html';
-$outputfile = File::Spec->catfile( $opts{ outputdir }, $outputfile );
+sub main {
+    run();
+}
 
-my $mdfile = $ARGV[0] or die;
-my $content = parse_markdown( join '', file( $mdfile )->slurp );
+sub run {
 
-my $index_html = get_data_section( 'index.html' );
-my $tx = Text::Xslate->new;
-my $output = $tx->render_string( $index_html, {
-    content => mark_raw( $content ),
-} );
-my $outputfile_fh = file( $outputfile )->open( 'w' ) or die $!;
-print $outputfile_fh $output;
-close $outputfile_fh;
+    $opts{ outputdir } = File::Spec->canonpath( $opts{ outputdir } );
+    output_static_files( $opts{ outputdir } );
+
+    my $outputfile = 'index.html';
+    $outputfile = File::Spec->catfile( $opts{ outputdir }, $outputfile );
+
+    my $mdfile = $ARGV[0] or die;
+    my $content = parse_markdown( join '', file( $mdfile )->slurp );
+
+    my $index_html = get_data_section( 'index.html' );
+    my $tx = Text::Xslate->new;
+    my $output = $tx->render_string( $index_html, {
+        content => mark_raw( $content ),
+    } );
+    my $outputfile_fh = file( $outputfile )->open( 'w' ) or die $!;
+    print $outputfile_fh $output;
+    close $outputfile_fh;
+}
+
 
 sub parse_markdown {
     my $md = shift;
