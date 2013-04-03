@@ -1,7 +1,7 @@
 Revision history for Perl extension App::markdown2impress
 0.02
         - using Module::Build
-        - imprement -r option for auto-restart.
+        - implement -r option for auto-restart.
 
 0.01    
         - original version
