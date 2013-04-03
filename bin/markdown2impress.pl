@@ -29,7 +29,6 @@ GetOptions(
 
 my $SectionRe = qr{(.+[ \t]*\n[-=]+[ \t]*\n*(?:(?!.+[ \t]*\n[-=]+[ \t]*\n*)(?:.|\n))*)};
 my $mdfile = $ARGV[0] or die;
-my $pid;
 
 main();
 
@@ -45,12 +44,10 @@ sub main {
 # codes for auto-restart is taken from Plack::Loader::Restarter
 sub auto_reload_run {
 
-    fork_and_start();
-    return unless $pid;
+    run();
     my $watcher = Filesys::Notify::Simple->new([dirname($mdfile)]);
 
     warn "Watching $mdfile for file updates.\n";
-    local $SIG{TERM} = sub { kill_child(); exit(0); };
 
     while (1) {
         my @restart;
@@ -68,36 +65,10 @@ sub auto_reload_run {
         for my $ev (@restart) {
             warn "-- $ev->{path} updated.\n";
         }
-        kill_child();
-        warn "Successfully killed! Restarting the new process.\n";
-        fork_and_start();
-        return unless $pid;
+        run();
     }
 }
 
-sub fork_and_start {
-    undef $pid;      # re-init in case it's a restart
-
-    my $new_pid = fork;
-    die "Can't fork: $!" unless defined $new_pid;
-
-    if ( $new_pid == 0 ) {  # child
-        return run();
-    }
-    else {
-        $pid = $new_pid;
-    }
-}
-
-sub kill_child {
-    my $self = shift;
-
-    return unless $pid;
-
-    warn "Killing the existing process (pid:$pid)\n";
-    kill 'TERM' => $pid;
-    waitpid($pid, 0);
-}
 
 sub run {
 
