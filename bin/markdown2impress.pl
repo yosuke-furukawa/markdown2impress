@@ -9,6 +9,8 @@ use File::Spec;
 use Path::Class;
 use Text::Markdown qw( markdown );
 use Text::Xslate qw( mark_raw );
+use Filesys::Notify::Simple;
+use File::Basename qw(dirname);
 
 my %opts = (
     width      => 1200,
@@ -22,24 +24,87 @@ GetOptions(
     'height=i'    => \$opts{ height },
     'column=i'    => \$opts{ max_column },
     'outputdir=s' => \$opts{ outputdir },
+    'r|reload'    => \$opts{ reload },
 );
+
 my $SectionRe = qr{(.+[ \t]*\n[-=]+[ \t]*\n*(?:(?!.+[ \t]*\n[-=]+[ \t]*\n*)(?:.|\n))*)};
+my $mdfile = $ARGV[0] or die;
+my $pid;
 
 main();
 
 sub main {
-    run();
+    if( !!$opts{ reload } ) {
+        auto_reload_run();
+    }
+    else {
+        run();
+    }
+}
+
+# codes for auto-restart is taken from Plack::Loader::Restarter
+sub auto_reload_run {
+
+    fork_and_start();
+    return unless $pid;
+    my $watcher = Filesys::Notify::Simple->new([dirname($mdfile)]);
+
+    warn "Watching $mdfile for file updates.\n";
+    local $SIG{TERM} = sub { kill_child(); exit(0); };
+
+    while (1) {
+        my @restart;
+        # this is blocking
+        $watcher->wait(sub {
+            my @events = @_;
+            my $file = File::Spec->rel2abs($mdfile);
+            @events = grep { $_->{path} eq $file }  @events;
+            return unless @events;
+            @restart = @events;
+        });
+
+        next unless @restart;
+
+        for my $ev (@restart) {
+            warn "-- $ev->{path} updated.\n";
+        }
+        kill_child();
+        warn "Successfully killed! Restarting the new process.\n";
+        fork_and_start();
+        return unless $pid;
+    }
+}
+
+sub fork_and_start {
+    undef $pid;      # re-init in case it's a restart
+
+    my $new_pid = fork;
+    die "Can't fork: $!" unless defined $new_pid;
+
+    if ( $new_pid == 0 ) {  # child
+        return run();
+    }
+    else {
+        $pid = $new_pid;
+    }
+}
+
+sub kill_child {
+    my $self = shift;
+
+    return unless $pid;
+
+    warn "Killing the existing process (pid:$pid)\n";
+    kill 'TERM' => $pid;
+    waitpid($pid, 0);
 }
 
 sub run {
 
     $opts{ outputdir } = File::Spec->canonpath( $opts{ outputdir } );
     output_static_files( $opts{ outputdir } );
-
     my $outputfile = 'index.html';
     $outputfile = File::Spec->catfile( $opts{ outputdir }, $outputfile );
-
-    my $mdfile = $ARGV[0] or die;
     my $content = parse_markdown( join '', file( $mdfile )->slurp );
 
     my $index_html = get_data_section( 'index.html' );
