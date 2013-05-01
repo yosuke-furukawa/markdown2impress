@@ -17,6 +17,7 @@ my $build = Module::Build->new(
         'Text::Markdown'          => 0,
         'Text::Xslate'            => 0,
         'Filesys::Notify::Simple' => 0,
+        'LWP::UserAgent'          => 0,
     },
     no_index    => { 'directory' => [ 'inc', 't', 'xt' ] },
     name        => 'markdown2impress',

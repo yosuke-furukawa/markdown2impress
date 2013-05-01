@@ -11,12 +11,14 @@ use Text::Markdown qw( markdown );
 use Text::Xslate qw( mark_raw );
 use Filesys::Notify::Simple;
 use File::Basename qw(dirname);
+use LWP::UserAgent;
 
 my %opts = (
     width      => 1200,
     height     => 800,
     max_column => 5,
     outputdir  => getcwd(),
+    socket_url  => 'http://localhost:3000/',
 );
 
 GetOptions(
@@ -25,6 +27,7 @@ GetOptions(
     'column=i'    => \$opts{ max_column },
     'outputdir=s' => \$opts{ outputdir },
     'r|reload'    => \$opts{ reload },
+    'socket_url=s' => \$opts{ socket_url },
 );
 
 my $SectionRe = qr{(.+[ \t]*\n[-=]+[ \t]*\n*(?:(?!.+[ \t]*\n[-=]+[ \t]*\n*)(?:.|\n))*)};
@@ -66,6 +69,10 @@ sub auto_reload_run {
             warn "-- $ev->{path} updated.\n";
         }
         run();
+
+        my $ua = LWP::UserAgent->new;
+        $ua->agent('impress.io');
+        $ua->get($opts{socket_url});
     }
 }
 
@@ -82,6 +89,7 @@ sub run {
     my $tx = Text::Xslate->new;
     my $output = $tx->render_string( $index_html, {
         content => mark_raw( $content ),
+        socket_url => $opts{ socket_url },
     } );
     my $outputfile_fh = file( $outputfile )->open( 'w' ) or die $!;
     print $outputfile_fh $output;
@@ -147,6 +155,7 @@ HTML
 sub output_static_files {
     my $dir = shift;
     my $impress_js       = get_data_section( 'impress.js' );
+    my $sync_page_js       = get_data_section( 'sync_page.js' );
     my $impress_demo_css = get_data_section( 'impress.css' );
 
     my $jsdir = File::Spec->catfile( $dir, 'js' );
@@ -159,10 +168,22 @@ sub output_static_files {
         make_path( $cssdir );
     }
 
-    my $jsfile = file( File::Spec->catfile( $jsdir, 'impress.js' ) );
-    unless ( -f $jsfile ) {
-        my $jsfh = $jsfile->openw;
+    my $impress_jsfile = file( File::Spec->catfile( $jsdir, 'impress.js' ) );
+    unless ( -f $impress_jsfile ) {
+        my $jsfh = $impress_jsfile->openw;
         print $jsfh $impress_js;
+        $jsfh->close;
+    }
+
+    my $tx = Text::Xslate->new;
+    $sync_page_js = $tx->render_string( $sync_page_js, {
+        socket_url => $opts{ socket_url },
+    } );
+
+    my $sync_page_jsfile = file( File::Spec->catfile( $jsdir, 'sync_page.js' ) );
+    unless ( -f $sync_page_jsfile ) {
+        my $jsfh = $sync_page_jsfile->openw;
+        print $jsfh $sync_page_js;
         $jsfh->close;
     }
 
@@ -208,6 +229,8 @@ if ("ontouchstart" in document.documentElement) {
 }
 </script>
 <script src="js/impress.js"></script>
+<script src="<: $socket_url :>socket.io/socket.io.js"></script>
+<script src="js/sync_page.js"></script>
 <script>impress().init();</script>
 </body>
 </html>
@@ -1007,6 +1030,26 @@ if ("ontouchstart" in document.documentElement) {
         
 })(document, window);
 
+@@ sync_page.js
+
+(function ( document, window ) {
+  'use strict';
+  var presenter = io.connect("<: $socket_url :>");
+  var listener = io.connect("<: $socket_url :>");
+  var room = document.getElementById("title");
+  room = room.firstElementChild.innerText;
+  presenter.emit('join', room);
+  listener.emit('join', room);
+  listener.on('reload', function() {
+    location.reload(true);
+  });
+  listener.on('sync', function(id) {
+    impress().goto(id);
+  });
+  document.addEventListener('impress:stepenter', function(el){
+    presenter.emit('sync', el.target.id);
+  });
+})(document, window);
 @@ impress.css
 
 /**
