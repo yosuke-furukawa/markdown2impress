@@ -1047,7 +1047,8 @@ if ("ontouchstart" in document.documentElement) {
     } else {
       syncButton.innerText = 'Connect';
     }
-  });
+    e.stopPropagation();
+  }, false);
   room = room.firstElementChild.innerText;
   presenter = presenter.socket.of('/presenter');
   presenter.on('connect_failed', function(reason) {
