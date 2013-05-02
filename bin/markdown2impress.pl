@@ -223,6 +223,9 @@ __DATA__
 <div class="hint">
     <p>Use a spacebar or arrow keys to navigate</p>
 </div>
+<div style="position: fixed; bottom: 10px; left: 10px; pointer-events: auto;">
+<button type="button" id="sync">Connect</button>
+</div>
 <script>
 if ("ontouchstart" in document.documentElement) { 
     document.querySelector(".hint").innerHTML = "<p>Tap on the left or right to navigate</p>";
@@ -1035,19 +1038,42 @@ if ("ontouchstart" in document.documentElement) {
 (function ( document, window ) {
   'use strict';
   var presenter = io.connect("<: $socket_url :>");
-  var listener = io.connect("<: $socket_url :>");
   var room = document.getElementById("title");
+  var syncButton = document.getElementById("sync");
+  syncButton.addEventListener('click', function(e) {
+    var syncText = syncButton.innerText;
+    if (syncText === 'Connect') {
+      syncButton.innerText = 'Disconnect';
+    } else {
+      syncButton.innerText = 'Connect';
+    }
+  });
   room = room.firstElementChild.innerText;
-  presenter.emit('join', room);
-  listener.emit('join', room);
-  listener.on('reload', function() {
-    location.reload(true);
-  });
-  listener.on('sync', function(id) {
-    impress().goto(id);
-  });
-  document.addEventListener('impress:stepenter', function(el){
-    presenter.emit('sync', el.target.id);
+  presenter = presenter.socket.of('/presenter');
+  presenter.on('connect_failed', function(reason) {
+    var listener = io.connect("<: $socket_url :>");
+    listener = listener.socket.of('/listener');
+    listener.on('connect',function() {
+      listener.emit('join', room);
+      listener.on('reload', function() {
+        location.reload(true);
+      });
+      listener.on('sync', function(id) {
+        if (syncButton.innerText === 'Connect') {
+          impress().goto(id);
+        }
+      });
+    });
+  }).on('connect', function() {
+    presenter.emit('join', room);
+    presenter.on('reload', function() {
+      location.reload(true);
+    });
+    document.addEventListener('impress:stepenter', function(el){
+      if (syncButton.innerText === 'Connect') {
+        presenter.emit('sync', el.target.id);
+      }
+    });
   });
 })(document, window);
 @@ impress.css
