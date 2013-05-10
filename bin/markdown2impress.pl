@@ -72,7 +72,7 @@ sub auto_reload_run {
 
         my $ua = LWP::UserAgent->new;
         $ua->agent('impress.io');
-        $ua->get("$opts{socket_url}/reload");
+        $ua->get($opts{socket_url});
     }
 }
 
